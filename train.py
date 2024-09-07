@@ -7,6 +7,24 @@ from model import SegmentationModel
 from torchvision import transforms
 from torch.utils.data import DataLoader
 
+
+def calculate_iou(preds, targets, threshold=0.5):
+    """Calculate the Intersection over Union (IoU) metric."""
+    # Binarize predictions
+    preds = preds > threshold
+    targets = targets > threshold
+
+    # Flatten tensors
+    preds = preds.view(-1).float()
+    targets = targets.view(-1).float()
+
+    intersection = torch.sum(preds * targets)
+    union = torch.sum(preds) + torch.sum(targets) - intersection
+
+    iou = intersection / (union + 1e-6)  # Add epsilon to avoid division by zero
+    return iou.item()
+
+
 # Define the dataset
 image_dir = '/Users/hiteshgupta/Documents/ML-CV/Image-Segement-Forgery/Dataset/val/img'
 mask_dir = '/Users/hiteshgupta/Documents/ML-CV/Image-Segement-Forgery/Dataset/val/mask'
@@ -32,11 +50,13 @@ criterion = nn.BCELoss()  # Binary Cross-Entropy Loss
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
 # Training loop
-num_epochs = 10  # Set the number of epochs
+num_epochs = 30  # Set the number of epochs
 
 for epoch in range(num_epochs):
     model.train()  # Set the model to training mode
     running_loss = 0.0
+    num_batches = 0
+    total_iou = 0.0
     
     for images, masks in tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}"):
         images = images.to(device)  # Move images to MPS/CPU
@@ -59,6 +79,16 @@ for epoch in range(num_epochs):
         
         # Track loss
         running_loss += loss.item()
+        
+        iou = calculate_iou(outputs, masks)
+        total_iou += iou
+        num_batches += 1
+    
+    avg_iou = total_iou / num_batches
     
     # Print epoch loss
-    print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {running_loss/len(train_loader)}")
+    print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {running_loss/len(train_loader)}, IoU: {avg_iou}")
+
+
+# Save the model
+torch.save(model.state_dict(), 'models/segmentation_model_1.pth')
